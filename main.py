@@ -147,6 +147,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    print('starting....')
     main()
 
 # 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
