@@ -1,10 +1,11 @@
 import logging
-
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, KeyboardButton, WebAppInfo
+import sqlite3
+from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, InlineKeyboardButton
 from telegram.ext import (
     Updater,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     Filters,
     ConversationHandler,
     CallbackContext,
@@ -17,7 +18,23 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-HOME, ORDER, HELP, CONTACTUS, ABOUT, SUBMIT = range(6)
+HOME, ORDER, HELP, CONTACTUS, ABOUT, CONFIRM, SUBMIT = range(7)
+
+
+'''
+conn = sqlite3.connect('database.db')
+c = conn.cursor()
+c.execute("""CREATE TABLE products (
+            name text,
+            price real,
+            description text
+)""")
+c.execute("INSERT INTO products VALUES ('PCB', 123.34, 'this is good')")
+conn.commit()
+c.execute("SELECT * from products WHERE name='PCB'")
+conn.commit()
+conn.close()
+'''
 
 
 def effective_delete(update: Update, context: CallbackContext):
@@ -34,7 +51,7 @@ def start(update: Update, context: CallbackContext):
     msg = update.message.reply_text(
         "Welcome to ciket",
         reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton('HOME', web_app=WebAppInfo("https://google.com"))], ['Place Order'], ['Help', 'ContactUs'],
+            [['Place Order'], ['Help', 'ContactUs'],
              ['About']], resize_keyboard=True
         ),
     )
@@ -48,14 +65,23 @@ def order(update: Update, context: CallbackContext):
             x.delete()
         except Exception:
             pass
-    msg = update.message.reply_text("Order page\n\nAvailable products", reply_markup=ReplyKeyboardMarkup([
-        ['PCB', 'ANTI theft system'],
-        ['LED Tapela', '3D Design and Printing'],
-        ['PCB', 'ANTI theft system'],
-        ['PCB', '3D Design and Printing', 'ANTI theft system'],
-        ['PCB', 'ANTI theft system'],
-        ["Back"]
-    ], resize_keyboard=True))
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT name from products")
+    keyboard = []
+    row = []
+    for i, x in enumerate(c.fetchall()):
+        row.append(x[0])
+        if (i + 1) % 2 == 0:
+            keyboard.append(row)
+            row = []
+    c.close()
+    conn.close()
+    if row:
+        keyboard.append(row)
+    keyboard.append(['Back'])
+    msg = update.message.reply_text("Order page\n\nAvailable products", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     context.user_data.setdefault('msg', []).append(msg)
     return ORDER
 
@@ -66,8 +92,29 @@ def products(update: Update, context: CallbackContext):
             x.delete()
         except Exception:
             pass
-    msg = update.message.reply_text(f"Ordering   <b>{update.message.text}</b>\n\nPlease provide the following details\n\n<code>Type\nAmount\nAlso\nOther\nDetails</code>", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT * from products WHERE name=?", (update.message.text,))
+    aproduct = c.fetchone()
+    if not aproduct:
+        msg = update.message.reply_text("Item not found",  reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
+        context.user_data.setdefault('msg', []).append(msg)
+        return
+    msg = update.message.reply_text(f"Name:   <b>{aproduct[0]}</b>\n\nPrice:    <b>{aproduct[1]}ETB</b>\n\nDescription:     <code>{aproduct[2]}</code>", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
     context.user_data.setdefault('msg', []).append(msg)
+    context.user_data['ordering'] = aproduct[0]
+    return CONFIRM
+
+
+def order_confirm(update: Update, context: CallbackContext):
+    for x in context.user_data.get('msg', []):
+        try:
+            x.delete()
+        except Exception:
+            pass
+    msg = update.message.reply_text(f"<b>Confirm your Order</b>\n\nOrdering: {context.user_data.get('ordering', '-')}\n\n<code>{update.message.text}</code>\n\n___", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Submit', callback_data='s'), InlineKeyboardButton('Cancel', callback_data='c')]]), parse_mode="html")
+    context.user_data.setdefault('msg', []).append(msg)
+    context.user_data['ordering_msg'] = update.message.text
     return SUBMIT
 
 
@@ -77,8 +124,24 @@ def order_submit(update: Update, context: CallbackContext):
             x.delete()
         except Exception:
             pass
-    msg = update.message.reply_text(f"Thanks   <b>{update.message.from_user.first_name}</b>\n\n<code>Order submitted successfully!\nWe will contact you shortly</code>", parse_mode="html")
-    return start(update, context)
+    if update.callback_query.data == 's':
+        context.bot.send_message(chat_id=-1001798663641, text=f"___\n\n\nOrdering: {context.user_data.get('ordering', '-')}\n\nName: {update.effective_user.first_name}\nUsername: @{update.effective_user.username}\nMessage: {context.user_data.get('ordering_msg')}\n\n\n___")
+        msg = context.bot.send_message(update.effective_chat.id, text=f"Thanks   <b>{update.effective_user.first_name}</b>\n\n<code>Order submitted successfully!\nWe will contact you shortly</code>", parse_mode="html")
+        context.user_data.setdefault('msg', []).append(msg)
+    elif update.callback_query.data == 'c':
+        msg = context.bot.send_message(update.effective_chat.id, text=f"Order Canceled")
+        context.user_data.setdefault('msg', []).append(msg)
+
+
+    msg = context.bot.send_message(update.effective_chat.id, text=
+        "Welcome to ciket",
+        reply_markup=ReplyKeyboardMarkup(
+            [['Place Order'], ['Help', 'ContactUs'],
+             ['About']], resize_keyboard=True
+        ),
+    )
+    context.user_data.setdefault('msg', []).append(msg)
+    return HOME
 
 
 def helper(update: Update, context: CallbackContext):
@@ -115,7 +178,7 @@ def about(update: Update, context: CallbackContext):
 
 
 def main() -> None:
-    updater = Updater("6416370425:AAHc8VUcj8fwrlvh45d1YdKqUeLigiG7hwg")
+    updater = Updater("6416370425:AAHfwMPDxp6KusdP39AnUHiqlfaEIMHnYRY")
     dispatcher = updater.dispatcher
 
     conv_handler = ConversationHandler(
@@ -131,9 +194,13 @@ def main() -> None:
                 MessageHandler(Filters.regex('Back'), start),
                 MessageHandler(Filters.text, products),
             ],
+            CONFIRM: [
+                MessageHandler(Filters.regex('Back'), start),
+                MessageHandler(Filters.text, order_confirm),
+            ],
             SUBMIT: [
                 MessageHandler(Filters.regex('Back'), start),
-                MessageHandler(Filters.text, order_submit),
+                CallbackQueryHandler(order_submit, pattern='s|c'),
             ]
         },
         fallbacks=[MessageHandler(Filters.regex('Back'), start), CommandHandler('start', start)],
@@ -142,7 +209,7 @@ def main() -> None:
     dispatcher.add_handler(MessageHandler(Filters.all, effective_delete), -1)
     dispatcher.add_handler(conv_handler)
 
-    updater.start_polling()
+    updater.start_polling(drop_pending_updates=True)
     updater.idle()
 
 
