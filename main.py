@@ -18,7 +18,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-HOME, ORDER, HELP, CONTACTUS, ABOUT, CONFIRM, SUBMIT = range(7)
+HOME, ORDER, PRODUCT_OR_SERVICE, HELP, CONTACTUS, ABOUT, CONFIRM, SUBMIT = range(8)
 
 
 '''
@@ -59,7 +59,25 @@ def start(update: Update, context: CallbackContext):
     return HOME
 
 
+def product_or_services(update: Update, context: CallbackContext):
+    for x in context.user_data.get('msg', []):
+        try:
+            x.delete()
+        except Exception:
+            pass
+    msg = update.message.reply_text(
+        "Products and Services",
+        reply_markup=ReplyKeyboardMarkup(
+            [['Products', 'Services'],
+             ['Back']], resize_keyboard=True
+        ),
+    )
+    context.user_data.setdefault('msg', []).append(msg)
+    return PRODUCT_OR_SERVICE
+
+
 def order(update: Update, context: CallbackContext):
+    context.user_data['p_or_s'] = update.message.text
     for x in context.user_data.get('msg', []):
         try:
             x.delete()
@@ -68,7 +86,7 @@ def order(update: Update, context: CallbackContext):
 
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute("SELECT name from products")
+    c.execute("SELECT name from " + context.user_data.get('p_or_s'))
     keyboard = []
     row = []
     for i, x in enumerate(c.fetchall()):
@@ -81,7 +99,7 @@ def order(update: Update, context: CallbackContext):
     if row:
         keyboard.append(row)
     keyboard.append(['Back'])
-    msg = update.message.reply_text("Order page\n\nAvailable products", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+    msg = update.message.reply_text("Order page\n\nAvailable Items", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     context.user_data.setdefault('msg', []).append(msg)
     return ORDER
 
@@ -94,13 +112,13 @@ def products(update: Update, context: CallbackContext):
             pass
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute("SELECT * from products WHERE name=?", (update.message.text,))
+    c.execute("SELECT * from " + context.user_data.get('p_or_s') + " WHERE name=?", (update.message.text,))
     aproduct = c.fetchone()
     if not aproduct:
         msg = update.message.reply_text("Item not found",  reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
         context.user_data.setdefault('msg', []).append(msg)
         return
-    msg = update.message.reply_text(f"Name:   <b>{aproduct[0]}</b>\n\nPrice:    <b>{aproduct[1]}ETB</b>\n\nDescription:     <code>{aproduct[2]}</code>", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
+    msg = update.message.reply_text(f"Name:   <b>{aproduct[0]}</b>\n\nPrice:    <b>{aproduct[1]}ETB</b>\n\nItem Description:     <code>{aproduct[2]}</code>\n\n\n     <code>{aproduct[3]}</code>", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
     context.user_data.setdefault('msg', []).append(msg)
     context.user_data['ordering'] = aproduct[0]
     return CONFIRM
@@ -161,7 +179,7 @@ def contactus(update: Update, context: CallbackContext):
             x.delete()
         except Exception:
             pass
-    msg = update.message.reply_text("CONTACTUS page", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True))
+    msg = update.message.reply_text("Ciket Technology\n\nPhone: +2519111111\nEmail: ciket@gmail.com\n\nHave a Question or want to give us Feedback or to report a But.\nPlease don't hesitate to reach out <a href='https://'", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True))
     context.user_data.setdefault('msg', []).append(msg)
     # return CONTACTUS
 
@@ -185,13 +203,18 @@ def main() -> None:
         entry_points=[CommandHandler('start', start)],
         states={
             HOME: [
-                MessageHandler(Filters.regex('Place Order'), order),
+                MessageHandler(Filters.regex('Place Order'), product_or_services),
                 MessageHandler(Filters.regex('Help'), helper),
                 MessageHandler(Filters.regex('ContactUs'), contactus),
                 MessageHandler(Filters.regex('About'), about),
             ],
-            ORDER: [
+            PRODUCT_OR_SERVICE: [
+                MessageHandler(Filters.regex('Products'), order),
+                MessageHandler(Filters.regex('Services'), order),
                 MessageHandler(Filters.regex('Back'), start),
+            ],
+            ORDER: [
+                MessageHandler(Filters.regex('Back'), product_or_services),
                 MessageHandler(Filters.text, products),
             ],
             CONFIRM: [
@@ -217,4 +240,4 @@ if __name__ == '__main__':
     print('starting....')
     main()
 
-# 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
+# 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1219
