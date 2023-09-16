@@ -118,10 +118,41 @@ def products(update: Update, context: CallbackContext):
         msg = update.message.reply_text("Item not found",  reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
         context.user_data.setdefault('msg', []).append(msg)
         return
-    msg = update.message.reply_text(f"Name:   <b>{aproduct[0]}</b>\n\nPrice:    <b>{aproduct[1]}ETB</b>\n\nItem Description:     <code>{aproduct[2]}</code>\n\n\n     <code>{aproduct[3]}</code>", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
+    msg_txt = f"""
+
+Name:  <b>{aproduct[0]}</b>
+Unit Price:  <b>{aproduct[1]}ETB</b>
+Description:  <code>{aproduct[2]}</code>
+<b> {aproduct[3]} </b>
+
+Customer Message: {context.user_data.get('customer_message') or None}
+
+<code>use /message your message to us</code>
+    <u>eg.</u> /message i want it for this monday
+<code>use /calc number of items you want"</code>
+    <u>eg.</u> /calc 4
+    """
+    msg = update.message.reply_text(msg_txt, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Submit', callback_data='s'), InlineKeyboardButton('Cancel', callback_data='c')]]), parse_mode="html")
     context.user_data.setdefault('msg', []).append(msg)
     context.user_data['ordering'] = aproduct[0]
+    context.user_data['selected_item'] = update.message.text
+    context.user_data['selected_price'] = aproduct[1]
     return CONFIRM
+
+
+def customer_message(update: Update, context: CallbackContext):
+    context.user_data['customer_message'] = ' '.join(context.args)
+    update.message.text = context.user_data['selected_item']
+    return products(update, context)
+
+
+def calc_item(update: Update, context: CallbackContext):
+    if not context.args or len(context.args) != 1 or not context.args[0].isdigit():
+        msg = update.message.reply_text('invalid data to calc')
+        context.user_data.setdefault('msg', []).append(msg)
+        return
+    msg = update.message.reply_text(f"{context.args[0]} items equals to {int(context.args[0]) * context.user_data.get('selected_price', 0)}")
+    context.user_data.setdefault('msg', []).append(msg)
 
 
 def order_confirm(update: Update, context: CallbackContext):
@@ -143,7 +174,7 @@ def order_submit(update: Update, context: CallbackContext):
         except Exception:
             pass
     if update.callback_query.data == 's':
-        context.bot.send_message(chat_id=-1001798663641, text=f"___\n\n\nOrdering: {context.user_data.get('ordering', '-')}\n\nName: {update.effective_user.first_name}\nUsername: @{update.effective_user.username}\nMessage: {context.user_data.get('ordering_msg')}\n\n\n___")
+        context.bot.send_message(chat_id=-1001798663641, text=f"___\n\n\nOrdering: {context.user_data.get('ordering', '-')}\n\nName: {update.effective_user.first_name}\nUsername: @{update.effective_user.username}\nMessage: {context.user_data.get('customer_message')}\n\n\n___")
         msg = context.bot.send_message(update.effective_chat.id, text=f"Thanks   <b>{update.effective_user.first_name}</b>\n\n<code>Order submitted successfully!\nWe will contact you shortly</code>", parse_mode="html")
         context.user_data.setdefault('msg', []).append(msg)
     elif update.callback_query.data == 'c':
@@ -219,7 +250,9 @@ def main() -> None:
             ],
             CONFIRM: [
                 MessageHandler(Filters.regex('Back'), start),
-                MessageHandler(Filters.text, order_confirm),
+                CommandHandler('message', customer_message),
+                CommandHandler('calc', calc_item),
+                CallbackQueryHandler(order_submit, pattern='s|c'),
             ],
             SUBMIT: [
                 MessageHandler(Filters.regex('Back'), start),
@@ -240,4 +273,4 @@ if __name__ == '__main__':
     print('starting....')
     main()
 
-# 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1219
+# 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
