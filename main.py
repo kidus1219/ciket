@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 HOME, ORDER, PRODUCT_OR_SERVICE, HELP, CONTACTUS, ABOUT, CONFIRM, SUBMIT = range(8)
 
-
 '''
 conn = sqlite3.connect('database.db')
 c = conn.cursor()
@@ -49,7 +48,7 @@ def start(update: Update, context: CallbackContext):
         except Exception:
             pass
     msg = update.message.reply_text(
-        "Welcome to ciket",
+        "Hey. I am Order Bot. What can I help with today?",
         reply_markup=ReplyKeyboardMarkup(
             [['Place Order'], ['Help', 'ContactUs'],
              ['About']], resize_keyboard=True
@@ -66,7 +65,7 @@ def product_or_services(update: Update, context: CallbackContext):
         except Exception:
             pass
     msg = update.message.reply_text(
-        "Products and Services",
+        "Alright, Are you looking for Products or Services",
         reply_markup=ReplyKeyboardMarkup(
             [['Products', 'Services'],
              ['Back']], resize_keyboard=True
@@ -104,7 +103,7 @@ def order(update: Update, context: CallbackContext):
     return ORDER
 
 
-def products(update: Update, context: CallbackContext):
+def products_item_or_services_item(update: Update, context: CallbackContext):
     for x in context.user_data.get('msg', []):
         try:
             x.delete()
@@ -115,23 +114,43 @@ def products(update: Update, context: CallbackContext):
     c.execute("SELECT * from " + context.user_data.get('p_or_s') + " WHERE name=?", (update.message.text,))
     aproduct = c.fetchone()
     if not aproduct:
-        msg = update.message.reply_text("Item not found",  reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
+        msg = update.message.reply_text("Item not found", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True), parse_mode="html")
         context.user_data.setdefault('msg', []).append(msg)
         return
-    msg_txt = f"""
+    if context.user_data.get('p_or_s') == "Products":
+        msg_txt = f"""
+    
+    Name:  <b>{aproduct[0]}</b>
+    Unit Price:  <b>{aproduct[1]}ETB</b>
+    Description:  <code>{aproduct[2]}</code>
+    
+    Ciket Message<b> {aproduct[3] or None} </b>
+    
+    Customer Message: {context.user_data.get('customer_message') or None}
+    
+    <code>use /message your message to us</code>
+        <u>eg.</u> /message i want it for this monday
+    <code>use /p_calc number of items you want"</code>
+        <u>eg.</u> /p_calc 4
+        """
+    elif context.user_data.get('p_or_s') == "Services":
+        msg_txt = f"""
 
-Name:  <b>{aproduct[0]}</b>
-Unit Price:  <b>{aproduct[1]}ETB</b>
-Description:  <code>{aproduct[2]}</code>
-<b> {aproduct[3]} </b>
+.       Name:  <b>{aproduct[0]}</b>
+        Unit Price:  <b>{aproduct[1]}ETB</b>
+        Description:  <code>{aproduct[2]}</code>
 
-Customer Message: {context.user_data.get('customer_message') or None}
+        Ciket Message<b> {aproduct[3] or None} </b>
 
-<code>use /message your message to us</code>
-    <u>eg.</u> /message i want it for this monday
-<code>use /calc number of items you want"</code>
-    <u>eg.</u> /calc 4
-    """
+        Customer Message: {context.user_data.get('customer_message') or None}
+
+        <code>use /message your message to us</code>
+            <u>eg.</u> /message i want it for this monday
+        <code>use /s_calc number of items you want"</code>
+            <u>eg.</u> /s_calc 4X8
+            """
+    else:
+        msg_txt = "Not found"
     msg = update.message.reply_text(msg_txt, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Submit', callback_data='s'), InlineKeyboardButton('Cancel', callback_data='c')]]), parse_mode="html")
     context.user_data.setdefault('msg', []).append(msg)
     context.user_data['ordering'] = aproduct[0]
@@ -143,16 +162,35 @@ Customer Message: {context.user_data.get('customer_message') or None}
 def customer_message(update: Update, context: CallbackContext):
     context.user_data['customer_message'] = ' '.join(context.args)
     update.message.text = context.user_data['selected_item']
-    return products(update, context)
+    return products_item_or_services_item(update, context)
 
 
-def calc_item(update: Update, context: CallbackContext):
+def p_calc_item(update: Update, context: CallbackContext):
     if not context.args or len(context.args) != 1 or not context.args[0].isdigit():
         msg = update.message.reply_text('invalid data to calc')
         context.user_data.setdefault('msg', []).append(msg)
         return
     msg = update.message.reply_text(f"{context.args[0]} items equals to {int(context.args[0]) * context.user_data.get('selected_price', 0)}")
     context.user_data.setdefault('msg', []).append(msg)
+
+
+def s_calc_item(update: Update, context: CallbackContext):
+    if not context.args or len(context.args) != 1 or len(context.args[0]) < 3 or 'x' not in context.args[0] or len(context.args[0].split('x')) != 2:
+        msg = update.message.reply_text('invalid data to calc')
+        context.user_data.setdefault('msg', []).append(msg)
+        return
+    given = context.args[0].split('x')
+    try:
+        a = float(given[0])
+        b = float(given[1])
+    except Exception as e:
+        print(e)
+        msg = update.message.reply_text('invalid data to calc')
+        context.user_data.setdefault('msg', []).append(msg)
+        return
+    else:
+        msg = update.message.reply_text(f"{context.args[0]} equals to {(a * b) * context.user_data.get('selected_price', 0)}")
+        context.user_data.setdefault('msg', []).append(msg)
 
 
 def order_confirm(update: Update, context: CallbackContext):
@@ -175,20 +213,19 @@ def order_submit(update: Update, context: CallbackContext):
             pass
     if update.callback_query.data == 's':
         context.bot.send_message(chat_id=-1001798663641, text=f"___\n\n\nOrdering: {context.user_data.get('ordering', '-')}\n\nName: {update.effective_user.first_name}\nUsername: @{update.effective_user.username}\nMessage: {context.user_data.get('customer_message')}\n\n\n___")
-        msg = context.bot.send_message(update.effective_chat.id, text=f"Thanks   <b>{update.effective_user.first_name}</b>\n\n<code>Order submitted successfully!\nWe will contact you shortly</code>", parse_mode="html")
+        msg = context.bot.send_message(update.effective_chat.id, text=f"Thanks   {update.effective_user.first_name}\n\nOrder submitted successfully!\nWe will contact you shortly")
         context.user_data.setdefault('msg', []).append(msg)
     elif update.callback_query.data == 'c':
         msg = context.bot.send_message(update.effective_chat.id, text=f"Order Canceled")
         context.user_data.setdefault('msg', []).append(msg)
 
-
     msg = context.bot.send_message(update.effective_chat.id, text=
-        "Welcome to ciket",
-        reply_markup=ReplyKeyboardMarkup(
-            [['Place Order'], ['Help', 'ContactUs'],
-             ['About']], resize_keyboard=True
-        ),
-    )
+    "Welcome to ciket",
+                                   reply_markup=ReplyKeyboardMarkup(
+                                       [['Place Order'], ['Help', 'ContactUs'],
+                                        ['About']], resize_keyboard=True
+                                   ),
+                                   )
     context.user_data.setdefault('msg', []).append(msg)
     return HOME
 
@@ -210,7 +247,7 @@ def contactus(update: Update, context: CallbackContext):
             x.delete()
         except Exception:
             pass
-    msg = update.message.reply_text("Ciket Technology\n\nPhone: +2519111111\nEmail: ciket@gmail.com\n\nHave a Question or want to give us Feedback or to report a But.\nPlease don't hesitate to reach out <a href='https://'", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True))
+    msg = update.message.reply_text("Ciket Technology\n\nPhone: +2519111111\nEmail: ciket@gmail.com\n\nHave a Question or want to give us Feedback or to report a But.\nPlease don't hesitate to reach out", reply_markup=ReplyKeyboardMarkup([["Back"]], resize_keyboard=True))
     context.user_data.setdefault('msg', []).append(msg)
     # return CONTACTUS
 
@@ -246,12 +283,13 @@ def main() -> None:
             ],
             ORDER: [
                 MessageHandler(Filters.regex('Back'), product_or_services),
-                MessageHandler(Filters.text, products),
+                MessageHandler(Filters.text, products_item_or_services_item),
             ],
             CONFIRM: [
                 MessageHandler(Filters.regex('Back'), start),
                 CommandHandler('message', customer_message),
-                CommandHandler('calc', calc_item),
+                CommandHandler('p_calc', p_calc_item),
+                CommandHandler('s_calc', s_calc_item),
                 CallbackQueryHandler(order_submit, pattern='s|c'),
             ],
             SUBMIT: [
