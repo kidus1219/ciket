@@ -147,7 +147,7 @@ def products_item_or_services_item(update: Update, context: CallbackContext):
         <code>use /message your message to us</code>
             <u>eg.</u> /message i want it for this monday
         <code>use /s_calc number of items you want"</code>
-            <u>eg.</u> /s_calc 4X8
+            <u>eg.</u> /s_calc 4x8
             """
     else:
         msg_txt = "Not found"
@@ -311,4 +311,4 @@ if __name__ == '__main__':
     print('starting....')
     main()
 
-# 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
+# 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
